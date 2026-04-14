@@ -1,0 +1,149 @@
+% poisson2d.mw
+% mwrap interface for poisson2d — double precision only.
+%
+% Generate MEX:
+%   mwrap -c99complex -i8 -mex poisson2d_mex -mb -list poisson2d.mw
+%   mwrap -c99complex -i8 -mex poisson2d_mex -c poisson2d_mex.c poisson2d.mw
+%   perl -pi -e 's/_{2,}/_/g' poisson2d_mex.c
+%
+% Exposed routines:
+%   gauss_mex         (n)                         -> tgl, wgl, Dgl
+%   zinit_mex         (npan,p,sinter,...)          -> z,zp,zpp,nz,w,wzp,awzp,zinter
+%   lap2d_eval_mex    (np,z,wzp,awzp,ub,unb,zt)   -> u
+%   sdspecialquad_mex (nt,zt,p,zsrc,nzsrc,wzp,a,b,iside) -> As,A,A1,A2,A3,A4
+
+% --------------------------------------------------------------------------
+@function [tgl, wgl, Dgl] = gauss_mex(n, tgl, wgl, Dgl)
+n   = double(n);
+tgl = zeros(n, 1);
+wgl = zeros(n, 1);
+Dgl = zeros(n, n);
+# FORTRAN gauss_r64(int[1] n, inout double[n] tgl, inout double[n] wgl, inout double[n,n] Dgl);
+end
+
+% --------------------------------------------------------------------------
+@function [z, zp, zpp, nz, w, wzp, awzp, zinter] = zinit_mex(npan, p, sinter, sinterdiff, T, W)
+npan = double(npan);
+p    = double(p);
+np   = npan * p;
+npi  = npan + 1;
+z      = complex(zeros(np,  1));
+zp     = complex(zeros(np,  1));
+zpp    = complex(zeros(np,  1));
+nz     = complex(zeros(np,  1));
+wzp    = complex(zeros(np,  1));
+zinter = complex(zeros(npi, 1));
+w      = zeros(np,  1);
+awzp   = zeros(np,  1);
+# FORTRAN zinit_r64(int[1] npan, int[1] p, double[npi] sinter, double[npan] sinterdiff, double[p] T, double[p] W, inout dcomplex[np] z, inout dcomplex[np] zp, inout dcomplex[np] zpp, inout dcomplex[np] nz, inout double[np] w, inout dcomplex[np] wzp, inout double[np] awzp, inout dcomplex[npi] zinter);
+end
+
+% --------------------------------------------------------------------------
+@function [u] = lap2d_eval_mex(np, z, wzp, awzp, ub, unb, zt, u)
+np   = double(np);
+ztre = double(real(zt));
+ztim = double(imag(zt));
+u    = double(0);
+# FORTRAN lap2d_eval_r64(int[1] np, dcomplex[np] z, dcomplex[np] wzp, double[np] awzp, double[np] ub, double[np] unb, double[1] ztre, double[1] ztim, inout double[1] u);
+end
+
+% --------------------------------------------------------------------------
+% sdspecialquad_mex: Helsing close-evaluation weights for nt targets, 1 panel.
+%
+% Inputs:
+%   nt        : number of targets (integer)
+%   zt(nt,1)  : target positions (complex)
+%   p         : panel order (integer)
+%   zsrc(p,1) : source nodes = s.x (complex)
+%   nzsrc(p,1): source normals = s.nx (complex)
+%   wzp(p,1)  : complex speed weights = s.wxp (complex)
+%   a(1)      : panel start endpoint (complex scalar as 1-element array)
+%   b(1)      : panel end   endpoint (complex scalar as 1-element array)
+%   iside     : 1=exterior, 0=interior
+%
+% Outputs (p×nt, Fortran column-major):
+%   As(p,nt)  : SLP weights (real double)
+%   A(p,nt)   : DLP weights (complex double; take real for Laplace)
+%   A1(p,nt)  : Re(Az) x-deriv (real)
+%   A2(p,nt)  : -Im(Az) y-deriv (real)
+%   A3(p,nt)  : Re(Azz) (real)
+%   A4(p,nt)  : -Im(Azz) (real)
+%
+% Note: Fortran outputs are p×nt. MATLAB's SDspecialquad returns nt×p.
+%   For comparison: As_matlab == As_fortran' (transpose).
+%   For nt=1 (single target), both are length-p column vectors.
+% --------------------------------------------------------------------------
+@function [As, Ad, A1, A2, A3, A4] = sdspecialquad_mex(nt, zt, p, zsrc, nzsrc, wzp, za, zb, iside, As, Ad, A1, A2, A3, A4)
+nt    = double(nt);
+p     = double(p);
+iside = double(iside);
+pnt   = p * nt;
+if nargin < 10 || isempty(As),   As   = zeros(p, nt);           end
+if nargin < 11 || isempty(Ad),   Ad   = complex(zeros(p, nt));  end
+if nargin < 12 || isempty(A1),   A1   = zeros(p, nt);           end
+if nargin < 13 || isempty(A2),   A2   = zeros(p, nt);           end
+if nargin < 14 || isempty(A3),   A3   = zeros(p, nt);           end
+if nargin < 15 || isempty(A4),   A4   = zeros(p, nt);           end
+# FORTRAN sdspecialquad_r64(int[1] nt, dcomplex[nt] zt, int[1] p, dcomplex[p] zsrc, dcomplex[p] nzsrc, dcomplex[p] wzp, dcomplex[1] za, dcomplex[1] zb, int[1] iside, inout double[p,nt] As, inout dcomplex[p,nt] Ad, inout double[p,nt] A1, inout double[p,nt] A2, inout double[p,nt] A3, inout double[p,nt] A4);
+end
+
+% ==========================================================================
+% Gmsh mesh generation interface
+% Backed by src/gmsh_wrap.cpp (extern "C" wrappers over Gmsh C++ API).
+%
+% Two-step generate+fetch pattern: gmsh_generate_mex returns counts n_nodes
+% and n_tris; gmsh_fetch_mex fills pre-allocated double[n_nodes,3] arrays.
+% GmshGeo.m calls these in sequence and hides the split from the user.
+% ==========================================================================
+
+% --------------------------------------------------------------------------
+@function [] = gmsh_init_mex()
+# gmsh_init_();
+end
+
+% --------------------------------------------------------------------------
+@function [loop_tag] = gmsh_add_polygon_mex(n, pts_x, pts_y, mesh_size, loop_tag)
+n         = double(n);
+mesh_size = double(mesh_size);
+loop_tag  = double(0);
+# gmsh_add_polygon_(int[1] n, double[n] pts_x, double[n] pts_y, double[1] mesh_size, inout int[1] loop_tag);
+end
+
+% --------------------------------------------------------------------------
+@function [n_nodes, n_tris] = gmsh_generate_mex(algorithm, n_nodes, n_tris)
+algorithm = double(algorithm);
+n_nodes   = double(0);
+n_tris    = double(0);
+# gmsh_generate_(int[1] algorithm, inout int[1] n_nodes, inout int[1] n_tris);
+end
+
+% --------------------------------------------------------------------------
+@function [nodes, tris] = gmsh_fetch_mex(n_nodes, n_tris, nodes, tris)
+n_nodes = double(n_nodes);
+n_tris  = double(n_tris);
+nodes   = zeros(n_nodes, 3);
+tris    = zeros(n_tris,  3);
+# gmsh_fetch_(int[1] n_nodes, int[1] n_tris, inout double[n_nodes,3] nodes, inout double[n_tris,3] tris);
+end
+
+% --------------------------------------------------------------------------
+@function [] = gmsh_finalize_mex()
+# gmsh_finalize_();
+end
+
+% --------------------------------------------------------------------------
+% koorn_uvs_wts_mex: Vioreanu-Rokhlin nodes and weights on reference triangle
+%   (0,0)-(1,0)-(0,1) for polynomial order norder.
+%
+% [uvs, wts] = koorn_uvs_wts_mex(norder)
+%   norder       : integer order (0..20)
+%   uvs(2,npols) : (u,v) node coordinates, npols=(norder+1)*(norder+2)/2
+%   wts(npols,1) : integration weights, sum(wts)=0.5
+% --------------------------------------------------------------------------
+@function [uvs, wts] = koorn_uvs_wts_mex(norder, uvs, wts)
+norder = double(norder);
+npols  = (norder+1)*(norder+2)/2;
+uvs    = zeros(2, npols);
+wts    = zeros(npols, 1);
+# FORTRAN koorn_uvs_wts_r64(int[1] norder, inout double[2,npols] uvs, inout double[npols] wts);
+end
