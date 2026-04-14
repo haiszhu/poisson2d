@@ -21,8 +21,7 @@ build/        Compiled objects and libraries (generated)
 ## Boundary integral
 
 The BIE discretisation and special quadrature follow the approach of
-**Johan Helsing**'s MATLAB demonstration codes for the Laplace and Poisson
-equations:
+**Johan Helsing**'s MATLAB demonstration codes for the Laplace equations:
 
 > J. Helsing, demo11b — close evaluation via the RCIP method:
 > <https://www.maths.lth.se/na/staff/helsing/Tutor/demo11b.txt>
@@ -78,7 +77,7 @@ test_GRF_disk_r128:
 Volume potentials require integrating `G(x,y) f(y)` over the domain
 interior.  This is handled by a **composite mesh** that partitions the
 domain into three region types, each with its own high-order quadrature
-scheme.  The target application is:
+scheme.  The code supports (singular/near-singular quadr WIP):
 
 > T. G. Anderson, H. Zhu, S. Veerapaneni,
 > *A fast, high-order scheme for evaluating volume potentials on complex
