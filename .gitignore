@@ -1,0 +1,21 @@
+# macOS Finder metadata
+.DS_Store
+
+# Local debug artifacts
+debug/
+
+#
+external/gmsh_build/
+
+# MATLAB MEX build outputs (generated)
+matlab/poisson2d_mex.mex*
+
+#
+*.mat
+*.png
+
+#
+*.a
+
+#
+.vscode/
