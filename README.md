@@ -167,6 +167,14 @@ Gmsh static library (one-time build):
 make gmsh
 ```
 
+## To do list
+
+* (it seems like smooth composite mesh quad test passes as a reference, hopefully agent could take over easily) port composite mesh into a separate repo. 
+* (prototype first, this was abandoned, do not recall why and at what stage, need to investigate  legacy code base) port triwild interface
+* (prototype first, tricky) port legacy singular and near singular code
+* (standard) port point fmm from legacy code
+* (need some work, this was not done in legacy code, need fresh implementation) port box fmm
+
 ---
 
 ## License
